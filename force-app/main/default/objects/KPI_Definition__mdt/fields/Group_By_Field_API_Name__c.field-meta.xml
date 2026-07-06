@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Group_By_Field_API_Name__c</fullName>
+    <label>Group By Field API Name</label>
+    <type>Text</type>
+    <length>255</length>
+    <required>true</required>
+    <unique>false</unique>
+    <description
+  >Field the aggregate is grouped by (e.g. StageName). Drives the chart's categories/series.</description>
+</CustomField>

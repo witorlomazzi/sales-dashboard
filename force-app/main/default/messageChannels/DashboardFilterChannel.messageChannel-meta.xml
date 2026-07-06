@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<LightningMessageChannel xmlns="http://soap.sforce.com/2006/04/metadata">
+    <masterLabel>Dashboard Filter Channel</masterLabel>
+    <isExposed>true</isExposed>
+    <description
+  >Broadcasts the dashboard's selected period (days) from the container to every KPI card.</description>
+    <lightningMessageFields>
+        <fieldName>periodDays</fieldName>
+        <description
+    >Number of days back from today the KPI cards should aggregate over.</description>
+    </lightningMessageFields>
+</LightningMessageChannel>

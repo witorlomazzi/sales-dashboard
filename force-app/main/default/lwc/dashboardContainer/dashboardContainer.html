@@ -1,0 +1,35 @@
+<template>
+  <div class="dashboard">
+    <div class="dashboard-header">
+      <div>
+        <h1>Painel de Vendas</h1>
+        <p>
+          KPIs configuráveis via Custom Metadata, sem nenhum campo fixo no
+          código
+        </p>
+      </div>
+      <lightning-combobox
+        label="Período"
+        variant="label-hidden"
+        value={period}
+        options={periodOptions}
+        onchange={handlePeriodChange}
+        class="period-select"
+      ></lightning-combobox>
+    </div>
+
+    <template lwc:if={error}>
+      <div class="dashboard-error" role="alert">{error}</div>
+    </template>
+
+    <template lwc:if={hasDefinitions}>
+      <div class="kpi-grid">
+        <template for:each={definitions} for:item="def">
+          <div key={def.DeveloperName} class="kpi-grid-item">
+            <c-kpi-card definition={def} period={period}></c-kpi-card>
+          </div>
+        </template>
+      </div>
+    </template>
+  </div>
+</template>

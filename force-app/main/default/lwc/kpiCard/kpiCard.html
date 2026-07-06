@@ -1,0 +1,47 @@
+<template>
+  <div class="kpi-card">
+    <div class="kpi-card-header">
+      <lightning-icon
+        icon-name={iconName}
+        size="small"
+        class="kpi-icon"
+      ></lightning-icon>
+      <div>
+        <h3>{label}</h3>
+        <p class="kpi-total">{formattedTotal}</p>
+      </div>
+    </div>
+
+    <template lwc:if={error}>
+      <div class="kpi-error" role="alert">{error}</div>
+    </template>
+
+    <template lwc:if={loading}>
+      <lightning-spinner
+        alternative-text="Carregando"
+        size="small"
+      ></lightning-spinner>
+    </template>
+
+    <div class="kpi-chart-wrap">
+      <canvas></canvas>
+    </div>
+
+    <template lwc:if={hasDrilldown}>
+      <div class="kpi-drilldown">
+        <div class="kpi-drilldown-header">
+          <span>Registros: {selectedGroupLabel}</span>
+          <button class="kpi-drilldown-close" onclick={handleCloseDrilldown}>
+            Fechar
+          </button>
+        </div>
+        <lightning-datatable
+          key-field="Id"
+          data={drilldownRows}
+          columns={drilldownColumns}
+          hide-checkbox-column
+        ></lightning-datatable>
+      </div>
+    </template>
+  </div>
+</template>
