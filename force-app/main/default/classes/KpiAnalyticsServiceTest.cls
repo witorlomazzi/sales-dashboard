@@ -70,6 +70,71 @@ private class KpiAnalyticsServiceTest {
   }
 
   @IsTest
+  static void snapshotKpiWithoutDateFieldIncludesAllRecords() {
+    // A KPI with no date field is a snapshot: records far outside any period
+    // must still be aggregated, since there is no time window.
+    KPI_Definition__mdt snapshot = KpiTestDataFactory.sumByStage(
+      'Snapshot_Sum',
+      1
+    );
+    snapshot.Date_Field_API_Name__c = null;
+    KpiDefinitionSelector.definitionOverrides = new List<KPI_Definition__mdt>{
+      snapshot
+    };
+    List<Opportunity> oldOpps = KpiTestDataFactory.opportunities(
+      2,
+      'Prospecting',
+      750
+    );
+    for (Opportunity o : oldOpps) {
+      o.CloseDate = Date.today().addDays(-400);
+    }
+    insert oldOpps;
+
+    Test.startTest();
+    KpiAnalyticsService.KpiResult result = KpiAnalyticsService.getKpiData(
+      'Snapshot_Sum',
+      30
+    );
+    Test.stopTest();
+
+    Assert.areEqual(1500, result.total);
+    Assert.areEqual(1, result.dataPoints.size());
+  }
+
+  @IsTest
+  static void drilldownWithoutDateFieldOmitsDateColumn() {
+    KPI_Definition__mdt snapshot = KpiTestDataFactory.sumByStage(
+      'Snapshot_Sum',
+      1
+    );
+    snapshot.Date_Field_API_Name__c = null;
+    KpiDefinitionSelector.definitionOverrides = new List<KPI_Definition__mdt>{
+      snapshot
+    };
+    List<Opportunity> oldOpps = KpiTestDataFactory.opportunities(
+      3,
+      'Prospecting',
+      100
+    );
+    for (Opportunity o : oldOpps) {
+      o.CloseDate = Date.today().addDays(-400);
+    }
+    insert oldOpps;
+
+    Test.startTest();
+    KpiAnalyticsService.DrilldownResult result = KpiAnalyticsService.getDrilldownRecords(
+      'Snapshot_Sum',
+      'Prospecting',
+      30
+    );
+    Test.stopTest();
+
+    Assert.areEqual(3, result.records.size());
+    Assert.areEqual(new List<String>{ 'Name', 'Amount' }, result.columns);
+  }
+
+  @IsTest
   static void defaultsPeriodWhenNullOrInvalid() {
     KpiDefinitionSelector.definitionOverrides = new List<KPI_Definition__mdt>{
       KpiTestDataFactory.sumByStage('Sum_By_Stage', 1)

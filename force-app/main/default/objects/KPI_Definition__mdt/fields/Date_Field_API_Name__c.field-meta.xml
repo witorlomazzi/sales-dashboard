@@ -4,8 +4,8 @@
     <label>Date Field API Name</label>
     <type>Text</type>
     <length>255</length>
-    <required>true</required>
+    <required>false</required>
     <unique>false</unique>
     <description
-  >Date/Datetime field the dashboard's period selector filters on (e.g. CloseDate).</description>
+  >Optional Date/Datetime field the dashboard's period selector filters on (e.g. CloseDate). Leave blank for snapshot KPIs that aggregate the whole table with no time window.</description>
 </CustomField>

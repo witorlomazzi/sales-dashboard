@@ -53,11 +53,25 @@ public with sharing class KpiAnalyticsService {
     KpiFieldMetadata.ResolvedFields fields = KpiFieldMetadata.resolve(def);
     String groupByField = def.Group_By_Field_API_Name__c;
     String dateField = def.Date_Field_API_Name__c;
+    Boolean hasDateWindow = String.isNotBlank(dateField);
     String selectExpr = def.Aggregate_Function__c == 'COUNT'
       ? 'COUNT(Id)'
       : def.Aggregate_Function__c + '(' + def.Aggregate_Field_API_Name__c + ')';
 
-    Date startDate = Date.today().addDays(-effectivePeriod);
+    // Snapshot KPIs (no date field configured) aggregate the whole table;
+    // the period filter and its binds only apply when a date field is set.
+    Map<String, Object> binds = new Map<String, Object>();
+    String dateFilter = '';
+    if (hasDateWindow) {
+      dateFilter =
+        ' WHERE ' +
+        dateField +
+        ' >= :startDate AND ' +
+        dateField +
+        ' <= :endDate';
+      binds.put('startDate', Date.today().addDays(-effectivePeriod));
+      binds.put('endDate', Date.today());
+    }
     String soql =
       'SELECT ' +
       groupByField +
@@ -66,11 +80,7 @@ public with sharing class KpiAnalyticsService {
       ' agg' +
       ' FROM ' +
       def.Object_API_Name__c +
-      ' WHERE ' +
-      dateField +
-      ' >= :startDate AND ' +
-      dateField +
-      ' <= :endDate' +
+      dateFilter +
       ' GROUP BY ' +
       groupByField +
       ' ORDER BY ' +
@@ -79,10 +89,6 @@ public with sharing class KpiAnalyticsService {
       ' LIMIT ' +
       MAX_GROUPS;
 
-    Map<String, Object> binds = new Map<String, Object>{
-      'startDate' => startDate,
-      'endDate' => Date.today()
-    };
     List<AggregateResult> rows = Database.queryWithBinds(
       soql,
       binds,
@@ -150,13 +156,17 @@ public with sharing class KpiAnalyticsService {
       : periodDays;
     KpiFieldMetadata.ResolvedFields fields = KpiFieldMetadata.resolve(def);
 
+    String dateField = def.Date_Field_API_Name__c;
+    Boolean hasDateWindow = String.isNotBlank(dateField);
+
     List<String> columns = new List<String>{ 'Name' };
     if (def.Aggregate_Function__c != 'COUNT') {
       columns.add(def.Aggregate_Field_API_Name__c);
     }
-    columns.add(def.Date_Field_API_Name__c);
+    if (hasDateWindow) {
+      columns.add(dateField);
+    }
 
-    Date startDate = Date.today().addDays(-effectivePeriod);
     // Deliberately not a ternary: Apex unifies ternary branch types at
     // compile time, and since String->Id has an implicit conversion, it
     // would silently coerce the picklist branch to Id too and blow up at
@@ -168,6 +178,25 @@ public with sharing class KpiAnalyticsService {
       groupValue = groupKey;
     }
 
+    Map<String, Object> binds = new Map<String, Object>{
+      'groupValue' => groupValue
+    };
+    // Snapshot KPIs have no date field: skip the period filter and order by
+    // Name instead of the (absent) date column.
+    String dateFilter = '';
+    String orderBy = ' ORDER BY Name ASC';
+    if (hasDateWindow) {
+      dateFilter =
+        ' AND ' +
+        dateField +
+        ' >= :startDate AND ' +
+        dateField +
+        ' <= :endDate';
+      orderBy = ' ORDER BY ' + dateField + ' DESC';
+      binds.put('startDate', Date.today().addDays(-effectivePeriod));
+      binds.put('endDate', Date.today());
+    }
+
     String soql =
       'SELECT Id, ' +
       String.join(columns, ', ') +
@@ -176,21 +205,9 @@ public with sharing class KpiAnalyticsService {
       ' WHERE ' +
       def.Group_By_Field_API_Name__c +
       ' = :groupValue' +
-      ' AND ' +
-      def.Date_Field_API_Name__c +
-      ' >= :startDate AND ' +
-      def.Date_Field_API_Name__c +
-      ' <= :endDate' +
-      ' ORDER BY ' +
-      def.Date_Field_API_Name__c +
-      ' DESC' +
+      dateFilter +
+      orderBy +
       ' LIMIT 50';
-
-    Map<String, Object> binds = new Map<String, Object>{
-      'groupValue' => groupValue,
-      'startDate' => startDate,
-      'endDate' => Date.today()
-    };
     DrilldownResult result = new DrilldownResult();
     result.records = Database.queryWithBinds(
       soql,

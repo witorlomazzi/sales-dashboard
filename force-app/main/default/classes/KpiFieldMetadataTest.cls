@@ -21,6 +21,17 @@ private class KpiFieldMetadataTest {
   }
 
   @IsTest
+  static void resolvesDefinitionWithoutDateField() {
+    // Snapshot KPI: a blank date field must resolve cleanly, leaving
+    // dateField null so the analytics service skips the period filter.
+    KPI_Definition__mdt def = KpiTestDataFactory.sumByStage('Snapshot_Sum', 1);
+    def.Date_Field_API_Name__c = null;
+    KpiFieldMetadata.ResolvedFields fields = KpiFieldMetadata.resolve(def);
+    Assert.isNull(fields.dateField);
+    Assert.isNotNull(fields.aggregateField);
+  }
+
+  @IsTest
   static void rejectsUnknownObject() {
     KPI_Definition__mdt def = KpiTestDataFactory.sumByStage('X', 1);
     def.Object_API_Name__c = 'Totally_Not_An_Object__x';

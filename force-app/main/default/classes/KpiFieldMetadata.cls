@@ -45,19 +45,25 @@ public inherited sharing class KpiFieldMetadata {
         'Field is not groupable: ' + def.Group_By_Field_API_Name__c
       );
     }
-    result.dateField = requireField(
-      fieldMap,
-      def.Date_Field_API_Name__c,
-      objectDescribe
-    );
-    Schema.DisplayType dateType = result.dateField.getType();
-    if (
-      dateType != Schema.DisplayType.DATE &&
-      dateType != Schema.DisplayType.DATETIME
-    ) {
-      throw new InvalidKpiConfigException(
-        'Date field is not a Date/DateTime: ' + def.Date_Field_API_Name__c
+    // The date field is optional: snapshot KPIs (e.g. current value-at-risk
+    // per account) aggregate the whole table, with no time window. When left
+    // blank, dateField stays null and the analytics service skips the period
+    // filter entirely.
+    if (String.isNotBlank(def.Date_Field_API_Name__c)) {
+      result.dateField = requireField(
+        fieldMap,
+        def.Date_Field_API_Name__c,
+        objectDescribe
       );
+      Schema.DisplayType dateType = result.dateField.getType();
+      if (
+        dateType != Schema.DisplayType.DATE &&
+        dateType != Schema.DisplayType.DATETIME
+      ) {
+        throw new InvalidKpiConfigException(
+          'Date field is not a Date/DateTime: ' + def.Date_Field_API_Name__c
+        );
+      }
     }
 
     if (def.Aggregate_Function__c != 'COUNT') {
