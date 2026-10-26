@@ -1,10 +1,26 @@
-# Sales Dashboard — Painel Analítico de KPIs Configuráveis
+# Sales Dashboard
 
-Dashboard de vendas construído inteiramente com Lightning Web Components: KPIs (gráficos, métricas, agrupamentos) são definidos via Custom Metadata, não hardcoded no código. Adicionar um KPI novo (qualquer objeto, qualquer campo numérico, qualquer agrupamento) não exige uma linha de Apex ou LWC a mais.
+Painel de vendas em Lightning Web Components em que cada KPI é configuração, não código: objeto, campo, função de agregação e agrupamento vêm de Custom Metadata. Adicionar um indicador novo não exige alterar Apex nem LWC.
 
-## O problema de negócio
+[![CI](https://github.com/witorlomazzi/sales-dashboard/actions/workflows/ci.yml/badge.svg)](https://github.com/witorlomazzi/sales-dashboard/actions/workflows/ci.yml)
 
-Painéis de vendas costumam virar um emaranhado de componentes hardcoded para cada métrica específica: mudar o campo de agrupamento ou trocar `Amount` por `ARR__c` vira uma tarefa de desenvolvimento. Este projeto trata cada KPI como dado de configuração (`KPI_Definition__mdt`), validado dinamicamente contra o schema do objeto antes de qualquer consulta.
+> Projeto demonstrativo, com empresa e dados fictícios. Experiências profissionais reais não são publicadas por confidencialidade.
+
+**Demo no navegador:** [salesforce.flupdigital.com.br/#demo-dashboard](https://salesforce.flupdigital.com.br/#demo-dashboard)
+
+## O problema
+
+Painéis de vendas costumam virar um componente fixo por métrica. Trocar o campo de agrupamento ou usar `ARR__c` no lugar de `Amount` vira tarefa de desenvolvimento, com deploy e teste para uma mudança que é só de negócio.
+
+## A solução
+
+Cada KPI é um registro de `KPI_Definition__mdt`. O motor valida a definição contra o schema do objeto e só então monta a consulta agregada. O container publica o período escolhido e cada card se atualiza sozinho, com drilldown por clique no gráfico.
+
+KPIs de exemplo incluídos:
+
+- **Pipeline por estágio:** soma de `Amount` agrupada por `StageName`, em barras.
+- **Quantidade de oportunidades por estágio:** contagem, em rosca.
+- **Valor ganho por proprietário:** soma de `Amount` agrupada por `OwnerId`, com o nome resolvido pelo describe do campo de referência.
 
 ## Arquitetura
 
@@ -43,21 +59,36 @@ flowchart TB
     CARD1 --> CHARTJS
 ```
 
-### Por que Lightning Message Service, e não um evento pai→filho
+## Decisões técnicas
 
-`dashboardContainer` e os `kpiCard` são **irmãos** na árvore de componentes (cada card é renderizado dentro de um `for:each`, não recebe eventos do pai diretamente). Em vez do container "alcançar" cada card via `querySelector` e chamar um método `@api`, o container só **publica** o período selecionado no canal `DashboardFilterChannel`, e cada `kpiCard` se **inscreve** por conta própria. Isso significa que adicionar um novo consumidor do filtro (uma segunda página de dashboard, por exemplo) não exige tocar no container.
+| Decisão                                           | Por quê                                                                                                         | Custo da escolha                                        |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| KPI como Custom Metadata                          | Indicador novo sem deploy de código                                                                             | A definição precisa ser validada em runtime             |
+| Lightning Message Service entre container e cards | Os cards são irmãos na árvore; um consumidor novo do filtro não exige tocar no container                        | Mais uma peça de metadata (o canal)                     |
+| Validação por `Schema.describe` antes da consulta | Objeto e campos vêm de configuração e mesmo assim são conferidos                                                | Uma chamada de describe por KPI                         |
+| `if/else` explícito no bind do drilldown          | O operador ternário unificava os tipos em `Id` na compilação e quebrava valores como `"Prospecting"` em runtime | Código um pouco mais longo, com a armadilha documentada |
+| Chart.js em Static Resource                       | Sem dependência externa em runtime (compatível com CSP)                                                         | Atualizar a biblioteca exige trocar o resource          |
 
-## Segurança do SOQL dinâmico agregado
+## Segurança
 
-Mesmo modelo de segurança do projeto Opportunity Map, aplicado a agregações:
+1. Objeto, campo de agregação, agrupamento e campo de data vêm de Custom Metadata mantido pelo admin, não de entrada livre do usuário.
+2. Antes de qualquer SOQL, `KpiFieldMetadata.resolve()` confere via `Schema.describe`: o objeto existe e é consultável, o agrupamento é agrupável, o campo agregado é numérico (quando a função não é `COUNT`) e o campo de data é `Date` ou `DateTime`.
+3. A única entrada do usuário, o período em dias, entra sempre por bind.
+4. A consulta roda com `AccessLevel.USER_MODE`: CRUD e FLS do usuário valem de ponta a ponta.
 
-1. Nome do objeto, campo de agregação, campo de agrupamento e campo de data vêm de **Custom Metadata configurado por admin** (dado confiável, não input de usuário livre).
-2. Antes de montar qualquer SOQL, `KpiFieldMetadata.resolve()` valida via `Schema.describe`: o objeto existe e é consultável, o campo de agrupamento é agrupável, o campo de agregação é numérico (quando a função não é `COUNT`), o campo de data é `Date`/`DateTime`.
-3. O único input de usuário real — o período em dias — entra sempre via **bind variable**.
-4. A consulta roda com `AccessLevel.USER_MODE`, então CRUD/FLS do usuário é respeitado de ponta a ponta.
-5. Uma pegadinha real encontrada durante o desenvolvimento: usar um operador ternário para decidir se o valor de bind do drilldown deveria ser `Id` ou `String` fazia o Apex **unificar os tipos em tempo de compilação** e forçar a conversão para `Id` mesmo no branch de `String`, quebrando em tempo de execução para valores como `"Prospecting"`. A correção foi trocar por `if/else` explícito — documentado no código.
+## Testes
 
-## Instalação em Scratch Org
+- **Apex:** 23 métodos de teste. Cobrem validação por describe (objeto ou campo desconhecido, campo não numérico, data inválida), agregação com rótulos de picklist e de referência, filtro de período, drilldown por grupo e lote de 200 registros.
+- **Jest:** 7 testes do `dashboardContainer` (definições, publicação do período, erro) e do `kpiCard` (carregamento, inscrição no canal, erro, drilldown por clique).
+- **CI:** o GitHub Actions roda o Jest e o Salesforce Code Analyzer (PMD) em cada push e pull request. O deploy de validação com testes Apex roda quando o repositório tem uma org de CI configurada.
+
+```bash
+npm install --legacy-peer-deps
+npm run test:unit
+sf apex run test --test-level RunLocalTests --code-coverage --wait 20
+```
+
+## Como rodar
 
 ```bash
 sf org login web --alias devhub --set-default-dev-hub
@@ -66,28 +97,22 @@ sf project deploy start
 sf apex run --file scripts/apex/setup-dashboard-demo.apex
 ```
 
-Depois, adicione o componente **Sales Dashboard** a uma App Page no Lightning App Builder.
+Depois, adicione o componente **Sales Dashboard** a uma App Page no Lightning App Builder. Em uma Developer Edition, pule a criação da scratch org e use `-o <sua-org>` nos comandos.
 
-## KPIs de exemplo incluídos
+## Por onde começar a ler o código
 
-- **Pipeline por Estágio** (SUM de `Amount`, agrupado por `StageName`, gráfico de barras)
-- **Quantidade de Oportunidades por Estágio** (COUNT, gráfico de rosca)
-- **Valor Ganho por Proprietário** (SUM de `Amount`, agrupado por `OwnerId`, com resolução automática de nome via describe de campo de referência)
+| Arquivo                                                  | O que observar                                       |
+| -------------------------------------------------------- | ---------------------------------------------------- |
+| `force-app/main/default/classes/KpiFieldMetadata.cls`    | Validação da definição contra o schema               |
+| `force-app/main/default/classes/KpiAnalyticsService.cls` | SOQL agregado dinâmico, rótulos de grupo e drilldown |
+| `force-app/main/default/lwc/kpiCard/`                    | Inscrição no canal de mensagens e gráfico            |
+| `force-app/main/default/lwc/dashboardContainer/`         | Publicação do período                                |
 
-## Testes
+## Limitações e próximos passos
 
-20 testes Apex (100% de aprovação) cobrindo: validação de describe (objeto/campo desconhecido, campo não numérico, campo de data inválido), agregação com rótulos de picklist e de referência (Owner), filtro de período, drilldown por grupo (incluindo o caso de referência convertido para `Id`), e bulk de 200 registros. 7 testes Jest cobrindo o `dashboardContainer` (definições, publicação de período, erro) e o `kpiCard` (carregamento, inscrição no canal de mensagem, erro, drilldown por clique no gráfico).
-
-```bash
-npm install --legacy-peer-deps
-npm run test:unit
-sf apex run test --tests KpiAnalyticsServiceTest --tests KpiFieldMetadataTest --tests KpiDashboardControllerTest --code-coverage --wait 20
-```
-
-## Demonstração
-
-> _Placeholder: adicionar GIF do dashboard com troca de período e drilldown por clique no gráfico._
+- Um KPI agrega um objeto por vez; indicadores que cruzam objetos exigiriam outro tipo de definição.
+- O tipo de gráfico da definição é repassado ao Chart.js, mas só barras e rosca têm estilo ajustado no `kpiCard`.
 
 ## Licença
 
-MIT — Chart.js (MIT).
+MIT. Chart.js (MIT).
